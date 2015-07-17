@@ -1,9 +1,8 @@
-use Map;
+use {Map, Val};
 use common::{self, PageOff, PostId, TagSlug, ThreadId};
 use http_muncher::{AsciiStr, Parser, ParserHandler};
 use jetscii::AsciiChars;
 use std::str;
-use std::sync::Arc;
 
 #[derive(Clone,Copy,Debug,PartialEq)]
 pub enum Route<'a> {
@@ -42,7 +41,7 @@ enum Header {
 pub enum Response {
     Empty,
     Static(&'static [u8]),
-    Body(Arc<Vec<u8>>),
+    Body(Val),
 }
 
 pub struct EchoHandler<'a> {

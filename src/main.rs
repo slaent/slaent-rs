@@ -40,6 +40,8 @@ use std::sync::Arc;
 mod common;
 mod fast_echo;
 #[macro_use] mod lazy_static;
+mod miniz;
+mod miniz_sys;
 mod route;
 //mod sys;
 
@@ -50,7 +52,7 @@ thread_local!(static PAGE_ID: Cell<common::page::Raw> = Cell::new(0));
 
 pub type Key = ThreadPage;
 
-pub type Val = Arc<Vec<u8>>;
+pub type Val = Arc<String>;
 
 //pub type Map = CuckooHashMap<Key, Val>;
 pub type Map = CuckooHashMap<Key, Val, DefaultState<FnvHasher>>;
@@ -132,15 +134,21 @@ fn main() {
     |_: &mut Request| {
         Ok(Response::with((status::Ok)))
     }).listen_with("localhost:3000", NUM_THREADS, iron::Protocol::Http).unwrap();*/
+    let home = Arc::<String>::new(include_str!("../static/slaent.html").into());
     for thread_id in (0..1) {
         for page_off in ::std::iter::range_inclusive(0u16, 65535) {
+            let body = if page_off == 0 {
+                home.clone()
+            } else {
+                let body = ::std::iter::repeat(&*format!("test thread {} page {}", thread_id, page_off)).take(1500).collect::<String>();
+                //let mut gzip = GzEncoder::new(Vec::new(), flate2::Compression::Best);
+                //write!(gzip, "{}", body).unwrap();
+                //let body = gzip.finish().unwrap();
+                Arc::new(body)
+            };
             let thread_id = common::ThreadId::new(thread_id).unwrap();
             let page_off = common::PageOff::new(page_off);
             let thread_page = ThreadPage::new(thread_id, page_off);
-            let body = ::std::iter::repeat(&*format!("test thread {} page {}", *thread_id, *page_off)).take(1500).collect::<String>();
-            let mut gzip = GzEncoder::new(Vec::new(), flate2::Compression::Best);
-            write!(gzip, "{}", body).unwrap();
-            let body = Arc::new(gzip.finish().unwrap());
             thread_page_map.insert(thread_page, body).ok().unwrap();
         }
     }

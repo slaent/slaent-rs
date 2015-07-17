@@ -1,5 +1,8 @@
 use Map;
+use flate2;
+use flate2::write::GzEncoder;
 use http_muncher::{Parser, ParserSettings};
+use miniz;
 use mio::*;
 use mio::tcp::*;
 use mio::util::Slab;
@@ -40,13 +43,13 @@ impl EchoConn {
         }
     }
 
-    fn writable(&mut self) -> io::Result<()> {
+    fn writable(&mut self, shared: &mut EchoShared) -> io::Result<()> {
         use nix::sys::uio::{self, IoVec};
         use route::Response::*;
 
-        const NO_HEADERS: &'static [u8] = b"HTTP/1.1 200 \r\nContent-Encoding: gzip\r\nContent-Type: text/html\r\nContent-Length: ";
-        const NO_HEADERS_KEEPALIVE: &'static [u8] = b"HTTP/1.1 200 \r\nContent-Encoding: gzip\r\nConnection: Keep-Alive\r\nContent-Type: text/html\r\nContent-Length: ";
-        const NO_HEADERS_CLOSE: &'static [u8] = b"HTTP/1.1 200 \r\nContent-Encoding: gzip\r\nConnection: close\r\nContent-Type: text/html\r\nContent-Length: ";
+        const NO_HEADERS: &'static [u8] = b"HTTP/1.1 200 \r\nContent-Encoding: deflate\r\nContent-Type: text/html\r\nContent-Length: ";
+        const NO_HEADERS_KEEPALIVE: &'static [u8] = b"HTTP/1.1 200 \r\nContent-Encoding: deflate\r\nConnection: Keep-Alive\r\nContent-Type: text/html\r\nContent-Length: ";
+        const NO_HEADERS_CLOSE: &'static [u8] = b"HTTP/1.1 200 \r\nContent-Encoding: deflate\r\nConnection: close\r\nContent-Type: text/html\r\nContent-Length: ";
 
         /*let message = match self.state {
             State::Write(ref message) => message,
@@ -72,36 +75,50 @@ impl EchoConn {
                     let mut digits = [0u8; MAX_BYTES];
                     let mut cursor = Cursor::new(&mut digits[..]);
                     let body = body;//.as_bytes();
-                    len = body.len() + NO_HEADERS.len();
-                    write!(&mut cursor, "{}", body.len()).and_then( |_| {
-                        let pos = cursor.position() as usize;
-                        let digits = cursor.into_inner();
-                        if pos < MAX_BYTES - NEWLINE_BYTES {
-                            digits[pos] = b'\r';
-                            digits[pos + 1] = b'\n';
-                            digits[pos + 2] = b'\r';
-                            digits[pos + 3] = b'\n';
+                    //let mut buf = Vec::new();
+                    //let mut buf = Cursor::new(&mut shared.buf[..]);
+                    //let mut gzip = GzEncoder::new(/*shared.buf*/buf, flate2::Compression::Fast);
+                    len = NO_HEADERS.len();
+                    //write!(gzip, "{}", body)
+                    //gzip.compress(body.as_bytes(), buf)
+                    shared.compressor.compress(body.as_bytes(), shared.buf)
+                        //.and_then( |_| gzip.finish() )
+                        .and_then( |/*buf*/blen| {
+                            shared.compressor.reset();
+                            //let blen = buf.position() as usize;
+                            //let body = buf.into_inner();
+                            let body = &shared.buf[..blen];
+                            len += blen;
+                            write!(&mut cursor, "{}", blen).and_then( |_| {
+                                let pos = cursor.position() as usize;
+                                let digits = cursor.into_inner();
+                                if pos < MAX_BYTES - NEWLINE_BYTES {
+                                    digits[pos] = b'\r';
+                                    digits[pos + 1] = b'\n';
+                                    digits[pos + 2] = b'\r';
+                                    digits[pos + 3] = b'\n';
  
-                            let headers = IoVec::from_slice(match keep_alive {
-                                KeepAlive::Default => NO_HEADERS,
-                                KeepAlive::KeepAlive => NO_HEADERS_KEEPALIVE,
-                                KeepAlive::Close => NO_HEADERS_CLOSE,
-                            });
-                            let digits_len = pos + NEWLINE_BYTES;
-                            len += digits_len;
-                            let digits = &digits[0..digits_len];
-                            let digits = IoVec::from_slice(digits);
-                            let body = IoVec::from_slice(body);
-                            uio::writev(self.sock.as_raw_fd(), &[headers, digits, body])
-                                .map(Some)
-                                .map_err( |err| io::Error::from_raw_os_error(err.errno() as i32))
-                        } else {
-                            // Couldn't fit into the content length (which should never actually
-                            // happen, but whatever... if it does better to return than crash, and
-                            // I doubt you actually want to write a four billion byte response).
-                            Ok(None)
-                        }
-                    })
+                                    let headers = IoVec::from_slice(match keep_alive {
+                                        KeepAlive::Default => NO_HEADERS,
+                                        KeepAlive::KeepAlive => NO_HEADERS_KEEPALIVE,
+                                        KeepAlive::Close => NO_HEADERS_CLOSE,
+                                    });
+                                    let digits_len = pos + NEWLINE_BYTES;
+                                    len += digits_len;
+                                    let digits = &digits[0..digits_len];
+                                    let digits = IoVec::from_slice(digits);
+                                    let body = IoVec::from_slice(&body[..blen]);
+                                    uio::writev(self.sock.as_raw_fd(), &[headers, digits, body])
+                                        .map(Some)
+                                        .map_err( |err| io::Error::from_raw_os_error(err.errno() as i32))
+                                } else {
+                                    // Couldn't fit into the content length (which should never actually
+                                    // happen, but whatever... if it does better to return than crash, and
+                                    // I doubt you actually want to write a four billion byte response).
+                                    Ok(None)
+                                }
+                            })
+                        })
                 },
                 State::Write(Empty, _) => panic!("Get rid of this ASAP"),
             };
@@ -155,7 +172,7 @@ impl EchoConn {
         const NOT_FOUND_KEEPALIVE: &'static [u8] = b"HTTP/1.1 404 Not Found\r\nContent-Length: 127\r\nConnection: Keep-Alive\r\n\r\n<!doctype html><meta charset=utf-8><title>Not Found</title><h1>Not Found</h1><p>The requested URL was not found on this server.";
 
         if let State::Write(_, _) = self.state { return Ok(()); }
-        let EchoShared { ref mut buf, request_parser: ref mut parser, thread_page_map } = *shared;
+        let EchoShared { ref mut buf, request_parser: ref mut parser, thread_page_map, .. } = *shared;
         let mut buf = &mut **buf;
         let settings = ParserSettings::new();
         let len = buf.len();
@@ -245,6 +262,7 @@ struct EchoShared<'a> {
     buf: &'a mut [u8],
     request_parser: Parser,
     //settings: &'a ParserSettings<'b, EchoHandler<'b>>,
+    compressor: miniz::Compressor,
     thread_page_map: &'static Map,
 }
 
@@ -254,6 +272,7 @@ impl<'a> EchoShared<'a> {
             buf: buf,
             request_parser: Parser::request(),
             //settings: settings,
+            compressor: miniz::Compressor::new(),
             thread_page_map: thread_page_map,
         }
     }
@@ -334,7 +353,7 @@ impl</*'a, */'b> EchoServer</*'a, */'b> {
             }
         };
         if is_writable {
-            self.conn(tok).writable()
+            self.conns[tok].writable(&mut self.shared)
         } else {
             Ok(())
         }
@@ -378,7 +397,7 @@ pub fn test_echo_server(thread_page_map: &'static Map) {
         srv.set_reuseport(true).unwrap();
         srv.set_nodelay(true).unwrap();
         srv.bind(addr).unwrap();
-        let mut buf = [0; 2048];
+        let mut buf = [0; 32768];
         let mut buf = &mut buf[..];
         // let settings = ParserSettings::new();
         let shared = EchoShared::new(buf, thread_page_map/*, &settings*/);
