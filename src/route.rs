@@ -1,15 +1,17 @@
-use common::{PageOff, PostId, TagSlug, ThreadId};
-use http_muncher::ParserHandler;
+use Map;
+use common::{self, PageOff, PostId, TagSlug, ThreadId};
+use http_muncher::{AsciiStr, Parser, ParserHandler};
 use jetscii::AsciiChars;
 use std::str;
+use std::sync::Arc;
 
-#[derive(Debug)]
-enum Route {
+#[derive(Clone,Copy,Debug,PartialEq)]
+pub enum Route<'a> {
     Home,
     Favicon,
-    ForumPage(TagSlug, PageOff),
-    ForumThreadNew(TagSlug),
-    Forum(TagSlug),
+    ForumPage(TagSlug<'a>, PageOff),
+    ForumThreadNew(TagSlug<'a>),
+    Forum(TagSlug<'a>),
     ThreadPagePost(ThreadId, PageOff, PostId),
     ThreadPostEdit(ThreadId, PostId),
     ThreadPostHistoryPage(ThreadId, PostId, PageOff),
@@ -24,37 +26,63 @@ enum Route {
     Robots,
 }
 
-pub struct EchoHandler {
-    route: Option<Route>,
+/*enum Header {
+    Connection,
 }
 
-impl EchoHandler {
-    pub fn new() -> Self {
+bitflags! {
+    flags Connection: u8 {
+        const KEEP_ALIVE = 0b00000001,
+        const CLOSE = 0b00000010,
+    }
+}*/
+
+#[derive(Clone,Debug,PartialEq)]
+pub enum Response {
+    Empty,
+    Static(&'static [u8]),
+    Body(Arc<String>),
+}
+
+pub struct EchoHandler<'a> {
+    pub route: Option<Route<'a>>,
+    pub response: Option<Response>,
+    thread_page_map: &'static Map,
+    /*header: Option<Header>,
+    pub connection: Connection,*/
+}
+
+impl<'a> EchoHandler<'a> {
+    pub fn new(thread_page_map: &'static Map) -> Self {
         EchoHandler {
             route: None,
+            response: None,
+            thread_page_map: thread_page_map,
+            /*header: None,
+            connection: Connection::empty(),*/
         }
     }
 }
 
-impl ParserHandler for EchoHandler {
-    fn on_url(&mut self, url: &[u8]) -> bool {
+impl<'a> ParserHandler<'a> for EchoHandler<'a> {
+    fn on_url(&mut self, parser: &Parser, url_ascii: &'a AsciiStr) -> bool {
         use self::Route::*;
 
-        let utf8 = |range| unsafe {
-            // Must be valid ASCII, or else the parser wouldn't have let it through.
-            str::from_utf8_unchecked(&url[range])
-        };
-        let utf8_f = |range| unsafe {
-            // Must be valid ASCII, or else the parser wouldn't have let it through.
-            str::from_utf8_unchecked(&url[range])
-        };
+        let utf8 = |range| AsciiStr::as_str(&url_ascii[range]);
+        let utf8_f = |range| AsciiStr::as_str(&url_ascii[range]);
 
         macro_rules! p ( ($x:expr) => {{ match $x.parse() {
             Ok(thread) => thread,
-            Err(_) => return false
+            Err(_) => return true
+        }}} );
+
+        macro_rules! s ( ($x:expr) => {{ match TagSlug::new($x) {
+            Ok(slug) => slug,
+            Err(_) => return true
         }}} );
 
         const SLASH: AsciiChars = AsciiChars::from_words(0x000000000000002f, 0, 1);
+        let url = url_ascii.as_bytes();
         self.route = Some(match url.len() {
             // /
             0...1 => Home,
@@ -64,33 +92,33 @@ impl ParserHandler for EchoHandler {
                     match SLASH.find(utf8(7..)) {
                         Some(i) => {
                             let i = i + 7;
-                            let slug = ();//utf8(..i);
+                            let slug = url_ascii[7..i].as_str();
                             if i + 1 < len {
                                 match url[i + 1] {
                                     b'p' => if i + 6 < len {
                                         if url[len - 1] == b'/' {
-                                            ForumPage(slug, p!(utf8_f(i + 6..len - 1)))
+                                            ForumPage(s!(slug), p!(utf8_f(i + 6..len - 1)))
                                         } else {
-                                            ForumPage(slug, p!(utf8(i + 6..)))
+                                            ForumPage(s!(slug), p!(utf8(i + 6..)))
                                         }
                                     } else {
-                                        return false
+                                        return true
                                     },
-                                    b't' => ForumThreadNew(slug),
-                                    _ => return false
+                                    b't' => ForumThreadNew(s!(slug)),
+                                    _ => return true
                                 }
                             } else {
-                                Forum(slug)
+                                Forum(s!(slug))
                             }
                         },
                         None => if url[7] == b'n' {
                             Favicon
                         } else {
-                            Forum(/*utf8(7..)*/())
+                            Forum(s!(utf8(7..)))
                         }
                     }
                 } else {
-                    return false;
+                    return true;
                 },
                 b't' => if len > 8 {
                     let len = url.len();
@@ -114,7 +142,7 @@ impl ParserHandler for EchoHandler {
                                                                 ThreadPagePost(thread, page, p!(utf8(i_ + 6..)))
                                                             }
                                                         } else {
-                                                            return false
+                                                            return true
                                                         },
                                                         b'e' => ThreadPostEdit(thread, p!(utf8_f(i + 6..i_))),
                                                         b'h' => if i_ + 14 < len {
@@ -127,7 +155,7 @@ impl ParserHandler for EchoHandler {
                                                         } else {
                                                             ThreadPostHistory(thread, p!(utf8_f(i + 6..i_)))
                                                         },
-                                                        _ => return false
+                                                        _ => return true
                                                     }
                                                 } else {
                                                     ThreadPage(thread, p!(utf8_f(i + 6..i_)))
@@ -136,7 +164,7 @@ impl ParserHandler for EchoHandler {
                                             None => ThreadPage(thread, p!(utf8(i + 6..)))
                                         }
                                     } else {
-                                        return false
+                                        return true
                                     },
                                     b'r' => ThreadReply(thread),
                                     b'l' => ThreadLast(thread),
@@ -150,7 +178,7 @@ impl ParserHandler for EchoHandler {
                                     } else {
                                         ThreadHistory(thread)
                                     },
-                                    _ => return false
+                                    _ => return true
                                 }
                             } else {
                                 Thread(thread)
@@ -159,7 +187,7 @@ impl ParserHandler for EchoHandler {
                         None => Thread(p!(utf8(8..)))
                     }
                 } else {
-                    return false
+                    return true
                 },
   /*url(r'^post/(?P<thread_id>\d+)/reply/$', 'create_reply', name = 'create_post_reply'),
   url(r'^post/preview$', 'preview_post', name = 'preview_post'),
@@ -172,12 +200,69 @@ impl ParserHandler for EchoHandler {
                 },*/
                 b'r' => match len {
                     11 => Robots,
-                    _ => return false,
+                    _ => return true,
                 },
-                _ => return false,
+                _ => return true,
             }
         });
-        //println!("{:?}", route);
+        // println!("{:?}", self.route);
+        true
+    }
+
+    /*fn on_header_field(&mut self, parser: &Parser<Self>, field: &'a AsciiStr) -> bool {
+        if !self.connection.is_all() {
+            if field == b"Connection" {
+                self.header = Some(Header::Connection);
+            }
+        }
+        true
+    }
+
+    fn on_header_value(&mut self, parser: &Parser<Self>, val: &'a [u8]) -> bool {
+        if let Some(header) = self.header.take() {
+            match header {
+                Header::Connection => {
+                    if val == b"close" {
+                        self.connection.insert(CLOSE);
+                    } else if val == b"Keep-Alive" {
+                        self.connection.insert(KEEP_ALIVE);
+                    }
+                }
+            }
+        }
+        true
+    }*/
+
+    fn on_headers_complete(&mut self, parser: &Parser) -> bool {
+        use self::Route::*;
+
+        let route = match self.route {
+            Some(ref route) => route,
+            None => return false
+        };
+
+        self.response = match *route {
+            Home => Some(Response::Empty),
+            Favicon => Some(Response::Empty),
+            ForumPage(_, _) => Some(Response::Empty),
+            ForumThreadNew(_) => Some(Response::Empty),
+            Forum(_) => Some(Response::Empty),
+            ThreadPagePost(_, _, _) => Some(Response::Empty),
+            ThreadPostEdit(_, _) => Some(Response::Empty),
+            ThreadPostHistoryPage(_, _, _) => Some(Response::Empty),
+            ThreadPostHistory(_, _) => Some(Response::Empty),
+            ThreadPage(thread_id, page_id) => {
+                let thread_page = common::ThreadPage::new(thread_id, page_id);
+                self.thread_page_map.find(&thread_page).map(Response::Body)
+            }
+            ThreadReply(_) => Some(Response::Empty),
+            ThreadLast(_) => Some(Response::Empty),
+            ThreadEdit(_) => Some(Response::Empty),
+            ThreadHistoryPage(_, _) => Some(Response::Empty),
+            ThreadHistory(_) => Some(Response::Empty),
+            Thread(_) => Some(Response::Empty),
+            Robots => Some(Response::Empty),
+        };
         true
     }
 }

@@ -3,19 +3,24 @@
 #![feature(num_bits_bytes)]
 #![feature(plugin)]
 #![plugin(postgres_macros)]
+#![feature(range_inclusive)]
 #![feature(result_expect)]
 #![feature(scoped)]
 #![plugin(maud_macros)]
 
+#[macro_use] extern crate bitflags;
 extern crate cuckoo;
 #[macro_use] extern crate error_type;
+#[macro_use] extern crate fallthrough;
+extern crate http_muncher;
 extern crate iron;
 extern crate jetscii;
-extern crate http_muncher;
+extern crate libc;
 extern crate mio;
 extern crate nix;
 #[cfg(test)] extern crate num;
-#[cfg(test)] extern crate quickcheck;
+//#[cfg(test)] extern crate quickcheck;
+#[cfg(test)] extern crate rand;
 extern crate router;
 
 use common::ThreadPage;
@@ -34,6 +39,7 @@ mod common;
 mod fast_echo;
 #[macro_use] mod lazy_static;
 mod route;
+//mod sys;
 
 const THREAD_ID_PARAM: &'static str = "thread_id";
 const PAGE_ID_PARAM: &'static str = "page_id";
@@ -124,5 +130,15 @@ fn main() {
     |_: &mut Request| {
         Ok(Response::with((status::Ok)))
     }).listen_with("localhost:3000", NUM_THREADS, iron::Protocol::Http).unwrap();*/
-    fast_echo::test_echo_server();
+    for thread_id in (0..1) {
+        for page_off in ::std::iter::range_inclusive(0u16, 65535) {
+            let thread_id = common::ThreadId::new(thread_id).unwrap();
+            let page_off = common::PageOff::new(page_off);
+            let thread_page = ThreadPage::new(thread_id, page_off);
+            let body = ::std::iter::repeat(&*format!("test thread {} page {}", *thread_id, *page_off)).take(1500).collect::<String>();
+            let body = Arc::new(body);
+            thread_page_map.insert(thread_page, body).ok().unwrap();
+        }
+    }
+    fast_echo::test_echo_server(thread_page_map);
 }
