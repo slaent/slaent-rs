@@ -26,11 +26,12 @@ pub enum Route<'a> {
     Robots,
 }
 
-/*enum Header {
-    Connection,
+enum Header {
+    //Connection,
+    AcceptEncoding,
 }
 
-bitflags! {
+/*bitflags! {
     flags Connection: u8 {
         const KEEP_ALIVE = 0b00000001,
         const CLOSE = 0b00000010,
@@ -41,7 +42,7 @@ bitflags! {
 pub enum Response {
     Empty,
     Static(&'static [u8]),
-    Body(Arc<String>),
+    Body(Arc<Vec<u8>>),
 }
 
 pub struct EchoHandler<'a> {
@@ -209,16 +210,16 @@ impl<'a> ParserHandler<'a> for EchoHandler<'a> {
         true
     }
 
-    /*fn on_header_field(&mut self, parser: &Parser<Self>, field: &'a AsciiStr) -> bool {
+    /*fn on_header_field(&mut self, parser: &Parser, field: &'a AsciiStr) -> bool {
         if !self.connection.is_all() {
-            if field == b"Connection" {
+            if field == b"Accept-Encoding" {
                 self.header = Some(Header::Connection);
             }
         }
         true
-    }
+    }*/
 
-    fn on_header_value(&mut self, parser: &Parser<Self>, val: &'a [u8]) -> bool {
+    /*fn on_header_value(&mut self, parser: &Parser<Self>, val: &'a [u8]) -> bool {
         if let Some(header) = self.header.take() {
             match header {
                 Header::Connection => {

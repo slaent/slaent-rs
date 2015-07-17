@@ -12,6 +12,7 @@
 extern crate cuckoo;
 #[macro_use] extern crate error_type;
 #[macro_use] extern crate fallthrough;
+extern crate flate2;
 extern crate http_muncher;
 //extern crate iron;
 extern crate jetscii;
@@ -24,16 +25,17 @@ extern crate nix;
 //extern crate router;
 
 use common::ThreadPage;
+use cuckoo::CuckooHashMap;
+use cuckoo::nodemap::FnvHasher;
+use flate2::write::GzEncoder;
 //use iron::prelude::*;
 //use iron::status::{self, Status};
 //use router::Router;
 use std::cell::Cell;
 use std::collections::hash_state::DefaultState;
 use std::error::Error;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::sync::Arc;
-use cuckoo::CuckooHashMap;
-use cuckoo::nodemap::FnvHasher;
 
 mod common;
 mod fast_echo;
@@ -48,7 +50,7 @@ thread_local!(static PAGE_ID: Cell<common::page::Raw> = Cell::new(0));
 
 pub type Key = ThreadPage;
 
-pub type Val = Arc<String>;
+pub type Val = Arc<Vec<u8>>;
 
 //pub type Map = CuckooHashMap<Key, Val>;
 pub type Map = CuckooHashMap<Key, Val, DefaultState<FnvHasher>>;
@@ -136,7 +138,9 @@ fn main() {
             let page_off = common::PageOff::new(page_off);
             let thread_page = ThreadPage::new(thread_id, page_off);
             let body = ::std::iter::repeat(&*format!("test thread {} page {}", *thread_id, *page_off)).take(1500).collect::<String>();
-            let body = Arc::new(body);
+            let mut gzip = GzEncoder::new(Vec::new(), flate2::Compression::Best);
+            write!(gzip, "{}", body).unwrap();
+            let body = Arc::new(gzip.finish().unwrap());
             thread_page_map.insert(thread_page, body).ok().unwrap();
         }
     }

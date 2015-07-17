@@ -6,6 +6,7 @@ authors = ["Joshua Yanovski <pythonesque@gmail.com>"]
 [dependencies]
 bitflags = "0.3.2"
 error-type = "0.1.2"
+flate2 = "0.2.7"
 # http-muncher = "0.2.0"
 # iron = "0.1.20"
 libc = "0.1.8"

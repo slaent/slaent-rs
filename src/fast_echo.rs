@@ -44,9 +44,9 @@ impl EchoConn {
         use nix::sys::uio::{self, IoVec};
         use route::Response::*;
 
-        const NO_HEADERS: &'static [u8] = b"HTTP/1.1 200 \r\nContent-Type: text/html\r\nContent-Length: ";
-        const NO_HEADERS_KEEPALIVE: &'static [u8] = b"HTTP/1.1 200 \r\nConnection: Keep-Alive\r\nContent-Type: text/html\r\nContent-Length: ";
-        const NO_HEADERS_CLOSE: &'static [u8] = b"HTTP/1.1 200 \r\nConnection: close\r\nContent-Type: text/html\r\nContent-Length: ";
+        const NO_HEADERS: &'static [u8] = b"HTTP/1.1 200 \r\nContent-Encoding: gzip\r\nContent-Type: text/html\r\nContent-Length: ";
+        const NO_HEADERS_KEEPALIVE: &'static [u8] = b"HTTP/1.1 200 \r\nContent-Encoding: gzip\r\nConnection: Keep-Alive\r\nContent-Type: text/html\r\nContent-Length: ";
+        const NO_HEADERS_CLOSE: &'static [u8] = b"HTTP/1.1 200 \r\nContent-Encoding: gzip\r\nConnection: close\r\nContent-Type: text/html\r\nContent-Length: ";
 
         /*let message = match self.state {
             State::Write(ref message) => message,
@@ -71,7 +71,7 @@ impl EchoConn {
                     const MAX_BYTES: usize = DIGIT_BYTES + NEWLINE_BYTES;
                     let mut digits = [0u8; MAX_BYTES];
                     let mut cursor = Cursor::new(&mut digits[..]);
-                    let body = body.as_bytes();
+                    let body = body;//.as_bytes();
                     len = body.len() + NO_HEADERS.len();
                     write!(&mut cursor, "{}", body.len()).and_then( |_| {
                         let pos = cursor.position() as usize;
