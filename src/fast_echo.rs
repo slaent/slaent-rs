@@ -8,6 +8,7 @@ use std::io::{self, Cursor, Write};
 use std::mem;
 use std::net::{SocketAddr, SocketAddrV4};
 use std::os::unix::io::AsRawFd;
+use std::thread;
 
 const SERVER: Token = Token(0);
 
@@ -357,22 +358,25 @@ impl<'a/*, 'b*/> Handler for EchoServer<'a/*, 'b*/> {
 pub fn test_echo_server(thread_page_map: &'static Map) {
     let ref addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 18080));
 
-    let srv = TcpSocket::v4().unwrap();
-    srv.set_reuseaddr(true).unwrap();
-    srv.set_nodelay(true).unwrap();
-    srv.bind(addr).unwrap();
-    let mut buf = [0; 2048];
-    let mut buf = &mut buf[..];
-    // let settings = ParserSettings::new();
-    let shared = EchoShared::new(buf, thread_page_map/*, &settings*/);
-    let srv = srv.listen(65536).unwrap();
+    (0..4).map( |_| thread::scoped(move || {
+        let srv = TcpSocket::v4().unwrap();
+        srv.set_reuseaddr(true).unwrap();
+        srv.set_reuseport(true).unwrap();
+        srv.set_nodelay(true).unwrap();
+        srv.bind(addr).unwrap();
+        let mut buf = [0; 2048];
+        let mut buf = &mut buf[..];
+        // let settings = ParserSettings::new();
+        let shared = EchoShared::new(buf, thread_page_map/*, &settings*/);
+        let srv = srv.listen(65536).unwrap();
 
-    let mut event_loop = EventLoop::new().unwrap();
+        let mut event_loop = EventLoop::new().unwrap();
 
-    event_loop.register_opt(&srv, SERVER, EventSet::readable(), PollOpt::edge()).unwrap();
+        event_loop.register_opt(&srv, SERVER, EventSet::readable(), PollOpt::edge()).unwrap();
 
-    let mut server = EchoServer::new(srv, shared);
+        let mut server = EchoServer::new(srv, shared);
 
-    // Start the event loop
-    event_loop.run(&mut server).unwrap();
+        // Start the event loop
+        event_loop.run(&mut server).unwrap();
+    })).collect::<Vec<_>>();
 }
