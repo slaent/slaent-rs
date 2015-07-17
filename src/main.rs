@@ -13,7 +13,7 @@ extern crate cuckoo;
 #[macro_use] extern crate error_type;
 #[macro_use] extern crate fallthrough;
 extern crate http_muncher;
-extern crate iron;
+//extern crate iron;
 extern crate jetscii;
 extern crate libc;
 extern crate mio;
@@ -21,12 +21,12 @@ extern crate nix;
 #[cfg(test)] extern crate num;
 //#[cfg(test)] extern crate quickcheck;
 #[cfg(test)] extern crate rand;
-extern crate router;
+//extern crate router;
 
 use common::ThreadPage;
-use iron::prelude::*;
-use iron::status::{self, Status};
-use router::Router;
+//use iron::prelude::*;
+//use iron::status::{self, Status};
+//use router::Router;
 use std::cell::Cell;
 use std::collections::hash_state::DefaultState;
 use std::error::Error;
@@ -58,7 +58,7 @@ lazy_static! {
     pub static ref THREAD_PAGE_MAP: Map = CuckooHashMap::default();
 }
 
-fn err<E: Error + Send + 'static>(e: E, s: Status) -> IronError {
+/*fn err<E: Error + Send + 'static>(e: E, s: Status) -> IronError {
     /*let description = format!("{}", e.description());
     IronError::new(e, (s, description))*/
     IronError::new(e, s)
@@ -115,12 +115,12 @@ fn thread_page_insert<'a, 'b>(req: &'a mut Request, thread_page_map: &'b Map) ->
         },
         Err(_) => Ok(Response::with(status::Conflict))
     }
-}
+}*/
 
 fn main() {
     const NUM_THREADS: usize = 1;
 
-    let mut router = Router::new();
+    // let mut router = Router::new();
     let thread_page_map: &'static Map = THREAD_PAGE_MAP.get();
     /*router.get(/*format!("/thread/:{}/page/:{}", THREAD_ID_PARAM, PAGE_ID_PARAM)*/"/",
                move |req: &mut Request| thread_page(req, thread_page_map));
