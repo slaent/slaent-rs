@@ -39,10 +39,12 @@ features = ["unstable"]
 
 [dependencies.mio]
 # git = "https://github.com/carllerche/mio"
-path = "/Users/pythonesque/dev/mozilla/mio"
+git = "https://github.com/pythonesque/mio"
+# path = "/Users/pythonesque/dev/mozilla/mio"
+rev = "reuseport"
 version = "0.4.0"
 
 [dependencies.http-muncher]
-# git = "https://github.com/pythonesque/rust-streaming-http-parser"
-path = "/Users/pythonesque/dev/todesignandconquer/rust-streaming-http-parser"
+git = "https://github.com/pythonesque/rust-streaming-http-parser"
+# path = "/Users/pythonesque/dev/todesignandconquer/rust-streaming-http-parser"
 version = "0.3.0"
