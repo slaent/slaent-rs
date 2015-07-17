@@ -47,4 +47,5 @@ version = "0.4.0"
 [dependencies.http-muncher]
 git = "https://github.com/pythonesque/rust-streaming-http-parser"
 # path = "/Users/pythonesque/dev/todesignandconquer/rust-streaming-http-parser"
+rev = "api-cleanup"
 version = "0.3.0"
