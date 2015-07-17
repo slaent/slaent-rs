@@ -12,10 +12,17 @@ use std::thread;
 
 const SERVER: Token = Token(0);
 
+#[derive(Clone,Copy,Debug)]
+enum KeepAlive {
+    Close,
+    Default,
+    KeepAlive,
+}
+
 #[derive(Clone,Debug)]
 enum State {
     Read,
-    Write(Response),
+    Write(Response, KeepAlive),
 }
 
 struct EchoConn {
@@ -38,6 +45,8 @@ impl EchoConn {
         use route::Response::*;
 
         const NO_HEADERS: &'static [u8] = b"HTTP/1.1 200 \r\nContent-Type: text/html\r\nContent-Length: ";
+        const NO_HEADERS_KEEPALIVE: &'static [u8] = b"HTTP/1.1 200 \r\nConnection: Keep-Alive\r\nContent-Type: text/html\r\nContent-Length: ";
+        const NO_HEADERS_CLOSE: &'static [u8] = b"HTTP/1.1 200 \r\nConnection: close\r\nContent-Type: text/html\r\nContent-Length: ";
 
         /*let message = match self.state {
             State::Write(ref message) => message,
@@ -48,11 +57,11 @@ impl EchoConn {
             let mut len;
             let res = match /* *message */self.state {
                 State::Read => return Ok(()),
-                State::Write(Static(message)) => {
+                State::Write(Static(message), _) => {
                     len = message.len();
                     self.sock.try_write(message)
                 },
-                State::Write(Body(ref body)) => {
+                State::Write(Body(ref body), keep_alive) => {
                     const U10_BITS: usize = 4;
                     /// Max bits in a base 10 representation of usize:
                     /// log_2(usize::MAX) / log_2(10) (+ 1 ?).
@@ -73,7 +82,11 @@ impl EchoConn {
                             digits[pos + 2] = b'\r';
                             digits[pos + 3] = b'\n';
  
-                            let headers = IoVec::from_slice(NO_HEADERS);
+                            let headers = IoVec::from_slice(match keep_alive {
+                                KeepAlive::Default => NO_HEADERS,
+                                KeepAlive::KeepAlive => NO_HEADERS_KEEPALIVE,
+                                KeepAlive::Close => NO_HEADERS_CLOSE,
+                            });
                             let digits_len = pos + NEWLINE_BYTES;
                             len += digits_len;
                             let digits = &digits[0..digits_len];
@@ -90,12 +103,12 @@ impl EchoConn {
                         }
                     })
                 },
-                State::Write(Empty) => panic!("Get rid of this ASAP"),
+                State::Write(Empty, _) => panic!("Get rid of this ASAP"),
             };
             match res {
                 Ok(None) => {
                     self.events.remove(EventSet::writable());
-                    if let State::Write(_) = self.state {
+                    if let State::Write(_, _) = self.state {
                         // Error!
                         self.state = State::Read;
                     }
@@ -115,8 +128,13 @@ impl EchoConn {
                         }
                         return Ok(());
                     } else {
-                        println!("hm");
-                        return Ok(());
+                        //println!("hm");
+                        self.events.remove(EventSet::writable());
+                        if self.events.is_hup() {
+                            self.events.remove(EventSet::hup());
+                            return Err(io::Error::last_os_error());
+                        }
+                        //return Ok(());
                     }
                 },
                 Err(e) => {
@@ -136,7 +154,7 @@ impl EchoConn {
         const NOT_FOUND_CLOSE: &'static [u8] = b"HTTP/1.1 404 Not Found\r\nContent-Length: 127\r\nConnection: Close\r\n<!doctype html><meta charset=utf-8><title>Not Found</title><h1>Not Found</h1><p>The requested URL was not found on this server.";
         const NOT_FOUND_KEEPALIVE: &'static [u8] = b"HTTP/1.1 404 Not Found\r\nContent-Length: 127\r\nConnection: Keep-Alive\r\n\r\n<!doctype html><meta charset=utf-8><title>Not Found</title><h1>Not Found</h1><p>The requested URL was not found on this server.";
 
-        if let State::Write(_) = self.state { return Ok(()); }
+        if let State::Write(_, _) = self.state { return Ok(()); }
         let EchoShared { ref mut buf, request_parser: ref mut parser, thread_page_map } = *shared;
         let mut buf = &mut **buf;
         let settings = ParserSettings::new();
@@ -164,12 +182,12 @@ impl EchoConn {
                         self.events.insert(EventSet::hup());
                     }
                     let keep_alive_by_default = parser.http_version() >= (1, 1);
-                    let good = if keep_alive == keep_alive_by_default {
-                        NO_CONTENT
+                    let (good, keep_alive) = if keep_alive == keep_alive_by_default {
+                        (NO_CONTENT, KeepAlive::Default)
                     } else if keep_alive {
-                        NO_CONTENT_KEEPALIVE
+                        (NO_CONTENT_KEEPALIVE, KeepAlive::KeepAlive)
                     } else {
-                        NO_CONTENT_CLOSE
+                        (NO_CONTENT_CLOSE, KeepAlive::Close)
                     };
                     /*let good = if parser.should_keep_alive() {
                         if parser.http_version() < (1, 1) {
@@ -186,14 +204,10 @@ impl EchoConn {
                         }
                     };*/
                     let status = parser.status();
-                    let bad = {
-                        if keep_alive == keep_alive_by_default {
-                            NOT_FOUND
-                        } else if keep_alive {
-                            NOT_FOUND_KEEPALIVE
-                        } else {
-                            NOT_FOUND_CLOSE
-                        }
+                    let bad = match keep_alive {
+                        KeepAlive::Default => NOT_FOUND,
+                        KeepAlive::KeepAlive => NOT_FOUND_KEEPALIVE,
+                        KeepAlive::Close => NOT_FOUND_CLOSE,
                     };
                     self.state = State::Write(match handler.response.take() {
                         Some(response) => {
@@ -213,7 +227,7 @@ impl EchoConn {
                             *parser = Parser::request();
                             Response::Static(bad)
                         }
-                    });
+                    }, keep_alive);
                     if r < len /*|| parser.is_final_chunk()*/ {
                         self.events.remove(EventSet::readable());
                         return Ok(());
