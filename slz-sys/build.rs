@@ -181,7 +181,8 @@ fn main() {
         .flag("-O3")
         .flag("-fomit-frame-pointer")
         .flag("-DCONFIG_REGPARM=3")
-        .flag("-Wall -g")
+        .flag("-Wall")
+        .flag("-g")
         .compile("libslz.a");
     println!("cargo:root={}", env::var("OUT_DIR").unwrap());
 }
