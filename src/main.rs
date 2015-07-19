@@ -4,7 +4,6 @@
 #![feature(plugin)]
 #![plugin(postgres_macros)]
 #![feature(range_inclusive)]
-#![feature(result_expect)]
 #![feature(scoped)]
 #![plugin(maud_macros)]
 
@@ -12,7 +11,7 @@
 extern crate cuckoo;
 #[macro_use] extern crate error_type;
 #[macro_use] extern crate fallthrough;
-extern crate flate2;
+//extern crate flate2;
 extern crate http_muncher;
 //extern crate iron;
 extern crate jetscii;
@@ -23,32 +22,34 @@ extern crate nix;
 //#[cfg(test)] extern crate quickcheck;
 #[cfg(test)] extern crate rand;
 //extern crate router;
+extern crate slz_sys;
 
 use common::ThreadPage;
 use cuckoo::CuckooHashMap;
 use cuckoo::nodemap::FnvHasher;
-use flate2::write::GzEncoder;
+//use flate2::write::GzEncoder;
 //use iron::prelude::*;
 //use iron::status::{self, Status};
 //use router::Router;
-use std::cell::Cell;
+//use std::cell::Cell;
 use std::collections::hash_state::DefaultState;
-use std::error::Error;
-use std::io::{Read, Write};
+//use std::error::Error;
+//use std::io::{Read, Write};
 use std::sync::Arc;
 
 mod common;
 mod fast_echo;
 #[macro_use] mod lazy_static;
-mod miniz;
-mod miniz_sys;
+//pub mod miniz;
+//pub mod miniz_sys;
 mod route;
+pub mod slz;
 //mod sys;
 
-const THREAD_ID_PARAM: &'static str = "thread_id";
-const PAGE_ID_PARAM: &'static str = "page_id";
+//const THREAD_ID_PARAM: &'static str = "thread_id";
+//const PAGE_ID_PARAM: &'static str = "page_id";
 
-thread_local!(static PAGE_ID: Cell<common::page::Raw> = Cell::new(0));
+//thread_local!(static PAGE_ID: Cell<common::page::Raw> = Cell::new(0));
 
 pub type Key = ThreadPage;
 
@@ -122,7 +123,7 @@ fn thread_page_insert<'a, 'b>(req: &'a mut Request, thread_page_map: &'b Map) ->
 }*/
 
 fn main() {
-    const NUM_THREADS: usize = 1;
+    //const NUM_THREADS: usize = 1;
 
     // let mut router = Router::new();
     let thread_page_map: &'static Map = THREAD_PAGE_MAP.get();

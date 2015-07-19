@@ -43,6 +43,7 @@ pub mod tag {
     }
 }
 
+#[allow(unused_variables)]
 pub mod post {
     use std::fmt;
     use std::num;
@@ -55,7 +56,7 @@ pub mod post {
     pub const BITS: usize = 48;
 
     // 15 decimal digits
-    pub const DIGITS: usize = 15;
+    // pub const DIGITS: usize = 15;
 
     pub const MAX: Raw = raw::MAX >> (raw::BITS - BITS);
 
@@ -112,7 +113,7 @@ pub mod post {
 }
 
 pub mod page {
-    use std::fmt;
+    //use std::fmt;
     use std::ops::Deref;
     use std::str::FromStr;
     pub use std::u16 as raw;
@@ -122,9 +123,9 @@ pub mod page {
     pub const BITS: usize = 16;
 
     // 5 decimal digits
-    pub const DIGITS: usize = 5;
+    // pub const DIGITS: usize = 5;
 
-    pub const MAX: Raw = raw::MAX >> (raw::BITS - BITS);
+    // pub const MAX: Raw = raw::MAX >> (raw::BITS - BITS);
 
     #[derive(Clone,Copy,Debug,Eq,Hash,Ord,PartialEq,PartialOrd)]
     pub struct Off(Raw);
@@ -147,14 +148,14 @@ pub mod page {
         }
     }
 
-    #[derive(Debug)]
+    /*#[derive(Debug)]
     pub struct OffOverflow;
 
     impl fmt::Display for OffOverflow {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             write!(f, "OffOverflow")
         }
-    }
+    }*/
 
     /*error_type! {
         #[derive(Debug)]
@@ -180,10 +181,10 @@ pub mod page {
 }
 
 /// Maximum number of posts per page
-pub const POSTS_PER_PAGE: post::Raw = 50;
+//pub const POSTS_PER_PAGE: post::Raw = 50;
 
 /// Maximum number of posts per thread
-pub const POSTS_PER_THREAD: post::Raw = POSTS_PER_PAGE * page::MAX as post::Raw;
+//pub const POSTS_PER_THREAD: post::Raw = POSTS_PER_PAGE * page::MAX as post::Raw;
 
 #[derive(Clone,Copy,Debug,Eq,Hash,Ord,PartialEq,PartialOrd)]
 pub struct ThreadPage(u64);

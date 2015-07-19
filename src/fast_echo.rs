@@ -1,14 +1,15 @@
 use Map;
-use flate2;
-use flate2::write::GzEncoder;
+//use flate2;
+//use flate2::write::GzEncoder;
 use http_muncher::{Parser, ParserSettings};
-use miniz;
+//use miniz;
 use mio::*;
 use mio::tcp::*;
 use mio::util::Slab;
-use route::{self, Response, EchoHandler};
+use route::{Response, EchoHandler};
+use slz::{DeflateStream, Slz};
+use std::cmp;
 use std::io::{self, Cursor, Write};
-use std::mem;
 use std::net::{SocketAddr, SocketAddrV4};
 use std::os::unix::io::AsRawFd;
 use std::thread;
@@ -81,10 +82,16 @@ impl EchoConn {
                     len = NO_HEADERS.len();
                     //write!(gzip, "{}", body)
                     //gzip.compress(body.as_bytes(), buf)
-                    shared.compressor.compress(body.as_bytes(), shared.buf)
+                    let blen = cmp::min(body.len(), shared.buf.len() - 7);
+                    // Note: could do shared.buf[..blen + 7] here, but it would cause the
+                    // application to crash in a state that is (IMO) not crash worthy, especially
+                    // since I will be handling too-large chunks soon enough.
+                    let blen = shared.deflate.encode(shared.buf, &body.as_bytes()[..blen], false);
+                    //shared.compressor.compress(body.as_bytes(), shared.buf)
                         //.and_then( |_| gzip.finish() )
-                        .and_then( |/*buf*/blen| {
-                            shared.compressor.reset();
+                        //.and_then( |/*buf*/blen| {
+                            //shared.compressor.reset();
+                            shared.deflate = shared.slz.deflate(true);
                             //let blen = buf.position() as usize;
                             //let body = buf.into_inner();
                             let body = &shared.buf[..blen];
@@ -118,7 +125,7 @@ impl EchoConn {
                                     Ok(None)
                                 }
                             })
-                        })
+                        //})
                 },
                 State::Write(Empty, _) => panic!("Get rid of this ASAP"),
             };
@@ -262,17 +269,22 @@ struct EchoShared<'a> {
     buf: &'a mut [u8],
     request_parser: Parser,
     //settings: &'a ParserSettings<'b, EchoHandler<'b>>,
-    compressor: miniz::Compressor,
+    //compressor: miniz::Compressor,
+    slz: Slz,
+    deflate: DeflateStream,
     thread_page_map: &'static Map,
 }
 
 impl<'a> EchoShared<'a> {
     fn new(buf: &'a mut [u8], thread_page_map: &'static Map/*, settings: &'a ParserSettings<'b, EchoHandler<'b>>*/) -> Self {
+        let slz = Slz::init();
         EchoShared {
             buf: buf,
             request_parser: Parser::request(),
             //settings: settings,
-            compressor: miniz::Compressor::new(),
+            //compressor: miniz::Compressor::new(),
+            slz: slz,
+            deflate: slz.deflate(true),
             thread_page_map: thread_page_map,
         }
     }
@@ -388,6 +400,7 @@ impl<'a/*, 'b*/> Handler for EchoServer<'a/*, 'b*/> {
     }
 }
 
+#[allow(deprecated)]
 pub fn test_echo_server(thread_page_map: &'static Map) {
     let ref addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 18080));
 
@@ -397,7 +410,7 @@ pub fn test_echo_server(thread_page_map: &'static Map) {
         srv.set_reuseport(true).unwrap();
         srv.set_nodelay(true).unwrap();
         srv.bind(addr).unwrap();
-        let mut buf = [0; 32768];
+        let mut buf = [0; 65536];
         let mut buf = &mut buf[..];
         // let settings = ParserSettings::new();
         let shared = EchoShared::new(buf, thread_page_map/*, &settings*/);

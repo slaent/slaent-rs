@@ -1,0 +1,3 @@
+[submodule "libslz"]
+	path = slz-sys/libslz
+	url = http://git.1wt.eu/git/libslz.git/

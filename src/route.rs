@@ -2,7 +2,6 @@ use {Map, Val};
 use common::{self, PageOff, PostId, TagSlug, ThreadId};
 use http_muncher::{AsciiStr, Parser, ParserHandler};
 use jetscii::AsciiChars;
-use std::str;
 
 #[derive(Clone,Copy,Debug,PartialEq)]
 pub enum Route<'a> {
@@ -25,10 +24,10 @@ pub enum Route<'a> {
     Robots,
 }
 
-enum Header {
+/*enum Header {
     //Connection,
     AcceptEncoding,
-}
+}*/
 
 /*bitflags! {
     flags Connection: u8 {
@@ -65,7 +64,7 @@ impl<'a> EchoHandler<'a> {
 }
 
 impl<'a> ParserHandler<'a> for EchoHandler<'a> {
-    fn on_url(&mut self, parser: &Parser, url_ascii: &'a AsciiStr) -> bool {
+    fn on_url(&mut self, _parser: &Parser, url_ascii: &'a AsciiStr) -> bool {
         use self::Route::*;
 
         let utf8 = |range| AsciiStr::as_str(&url_ascii[range]);
@@ -233,7 +232,7 @@ impl<'a> ParserHandler<'a> for EchoHandler<'a> {
         true
     }*/
 
-    fn on_headers_complete(&mut self, parser: &Parser) -> bool {
+    fn on_headers_complete(&mut self, _parser: &Parser) -> bool {
         use self::Route::*;
 
         let route = match self.route {

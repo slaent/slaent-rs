@@ -18,6 +18,7 @@ dependencies = [
  "quickcheck_macros 0.2.20 (registry+https://github.com/rust-lang/crates.io-index)",
  "r2d2_postgres 0.9.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "slz-sys 0.1.0",
 ]
 
 [[package]]
@@ -299,6 +300,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "slab"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "slz-sys"
+version = "0.1.0"
+dependencies = [
+ "gcc 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libc 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)",
+]
 
 [[package]]
 name = "time"
