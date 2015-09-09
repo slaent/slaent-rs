@@ -6,6 +6,12 @@ use slz_sys::*;
 /// Must *only* be called from Slz::init().
 static DIST_TABLE: Once = ONCE_INIT;
 
+/// SLZ encode call may result in up to 5 bytes more output than input
+pub const DEFLATE_ENCODE_MIN_PADDING: usize = 5;
+/// SLZ encode call may result in up to 2 additional bytes if !more
+pub const DEFLATE_ENCODE_FINAL_PADDING: usize = 2;
+/// SLZ finish call may result in up to 4 bytes of output.
+pub const DEFLATE_FINISH_MAX_BYTES: usize = 4;
 
 /// Represents the initialized Slz library.
 #[derive(Copy,Clone)]
@@ -45,7 +51,7 @@ impl DeflateStream {
     /// Returns the number of output bytes.
     pub fn encode(&mut self, out: &mut [u8], inp: &[u8], more: bool) -> usize {
         unsafe {
-            let diff_len = if more { 0 } else { 2 } + 5;
+            let diff_len = if more { 0 } else { DEFLATE_ENCODE_FINAL_PADDING } + DEFLATE_ENCODE_MIN_PADDING;
             // Can safely assume neither inp nor out have lengths exceeding 7, since there would
             // be no room for the Struct_slz_stream otherwise.
             assert!(out.len() >= inp.len() + diff_len,
@@ -53,15 +59,18 @@ impl DeflateStream {
                     inp.len() + diff_len, out.len());
             // Implicitly assumes inp.len() <= i64::MAX, which is probably wrong...
             slz_rfc1951_encode(&mut self.0, out.as_mut_ptr(), inp.as_ptr(), inp.len() as i64,
-                               if more {1 } else { 0 }) as usize
+                               if more { 1 } else { 0 }) as usize
         }
     }
 
     /// Flushes any pending bytes into `buf`.
     ///
     /// Returns the number of bytes written.
-    pub fn finish(&mut self, buf: &mut [u8; 4]) -> usize {
+    pub fn finish(&mut self, buf: &mut [u8]) -> usize {
         unsafe {
+            assert!(buf.len() >= DEFLATE_FINISH_MAX_BYTES,
+                    "Not enough space in output buffer: {} bytes required, but only {} bytes allocated.",
+                    DEFLATE_FINISH_MAX_BYTES, buf.len());
             slz_rfc1951_finish(&mut self.0, buf.as_mut_ptr()) as usize
         }
     }

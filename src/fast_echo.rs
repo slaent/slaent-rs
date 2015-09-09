@@ -7,7 +7,7 @@ use mio::*;
 use mio::tcp::*;
 use mio::util::Slab;
 use route::{Response, EchoHandler};
-use slz::{DeflateStream, Slz};
+use slz::{self, DeflateStream, Slz};
 use std::cmp;
 use std::io::{self, Cursor, Write};
 use std::net::{SocketAddr, SocketAddrV4};
@@ -82,11 +82,13 @@ impl EchoConn {
                     len = NO_HEADERS.len();
                     //write!(gzip, "{}", body)
                     //gzip.compress(body.as_bytes(), buf)
-                    let blen = cmp::min(body.len(), shared.buf.len() - 7);
+                    const PADDING_BYTES: usize = slz::DEFLATE_ENCODE_MIN_PADDING + slz::DEFLATE_ENCODE_FINAL_PADDING + slz::DEFLATE_FINISH_MAX_BYTES;
+                    let blen = cmp::min(body.len(), shared.buf.len() - PADDING_BYTES);
                     // Note: could do shared.buf[..blen + 7] here, but it would cause the
                     // application to crash in a state that is (IMO) not crash worthy, especially
                     // since I will be handling too-large chunks soon enough.
                     let blen = shared.deflate.encode(shared.buf, &body.as_bytes()[..blen], false);
+                    let blen = blen + shared.deflate.finish(&mut shared.buf[blen..]);
                     //shared.compressor.compress(body.as_bytes(), shared.buf)
                         //.and_then( |_| gzip.finish() )
                         //.and_then( |/*buf*/blen| {
